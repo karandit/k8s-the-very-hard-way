@@ -1,0 +1,36 @@
+[Unit]
+Description=Kubernetes API Server
+Documentation=https://kubernetes.io
+After=etcd.service
+Requires=etcd.service
+
+[Service]
+Type=notify
+
+ExecStart=/usr/local/bin/kube-apiserver \
+    --service-cluster-ip-range=10.96.0.0/12 \
+    --service-account-issuer=https://kubernetes.default.svc.cluster.local \
+    --service-account-key-file=/etc/kubernetes/pki/sa.pub \
+    --service-account-signing-key-file=/etc/kubernetes/pki/sa.key \
+    --etcd-cafile=/etc/etcd/pki/ca.crt \
+    --etcd-certfile=/etc/etcd/pki/client.crt \
+    --etcd-keyfile=/etc/etcd/pki/client.key \
+    --etcd-servers=https://127.0.0.1:2379 \
+    --anonymous-auth=false \
+    --token-auth-file=/etc/kubernetes/tokens.csv \
+    --authorization-mode=Node,RBAC \
+    --tls-cert-file=/etc/kubernetes/pki/apiserver.crt \
+    --tls-private-key-file=/etc/kubernetes/pki/apiserver.key \
+    --client-ca-file=/etc/kubernetes/pki/ca.crt \
+    --kubelet-client-certificate=/etc/kubernetes/pki/apiserver-kubelet-client.crt \
+    --kubelet-client-key=/etc/kubernetes/pki/apiserver-kubelet-client.key \
+    --enable-bootstrap-token-auth=true
+
+
+EnvironmentFile=-/etc/default/%p
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
