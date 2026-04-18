@@ -158,5 +158,29 @@ sudo cp /vagrant/flanneld.service.orig /etc/systemd/system/flanneld.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now flanneld
 
+echo "======= Installing kube-proxy"
+curl -fsSLO "https://dl.k8s.io/${KUBE_VERSION?}/bin/linux/amd64/kube-proxy"
+sudo install -m 755 kube-proxy /usr/local/bin
+
+sudo cp /vagrant/kube-proxy.conf /etc/kubernetes/kube-proxy.conf
+
+echo "======= Configuring kube-proxy"
+sudo mkdir -p /etc/kubernetes/kube-proxy
+sudo cat <<EOF | sudo tee /etc/kubernetes/kube-proxy/config.yaml
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+kind: KubeProxyConfiguration
+
+clusterCIDR: 10.244.0.0/16
+
+clientConnection:
+  kubeconfig: /etc/kubernetes/kube-proxy.conf
+EOF
+
+echo "=======🚀 Starting kube-proxy service"
+curl --skip-existing -fsSLO https://labs.iximiuz.com/content/files/courses/kubernetes-the-very-hard-way-0cbfd997/04-cluster/03-kube-proxy/__static__/kube-proxy.service?v=1774217659
+sudo cp kube-proxy.service /etc/systemd/system/kube-proxy.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now kube-proxy
+
 echo "======= Status"
-systemctl list-units -q kubelet.service containerd.service flanneld.service
+systemctl list-units -q kubelet.service containerd.service flanneld.service kube-proxy.service

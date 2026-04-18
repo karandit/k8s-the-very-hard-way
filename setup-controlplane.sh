@@ -351,5 +351,36 @@ subjects:
     name: system:flannel
 EOF
 
+echo "======= Configuring kube-proxy"
+cd /etc/kubernetes/pki
+sudo openssl genrsa -out kube-proxy.key 2048
+sudo openssl req -new -key kube-proxy.key -out kube-proxy.csr -subj "/CN=system:kube-proxy"
+sudo openssl x509 -req -in kube-proxy.csr -out kube-proxy.crt \
+  -CA ca.crt -CAkey ca.key \
+  -days 365
+cd
+
+echo "======= Creating a kubeconfig file for kube-controller-manager"
+sudo kubectl config set-cluster default \
+    --kubeconfig=/etc/kubernetes/kube-proxy.conf \
+    --certificate-authority=/etc/kubernetes/pki/ca.crt \
+    --embed-certs=true \
+    --server=https://control-plane:6443
+
+sudo kubectl config set-credentials default \
+    --kubeconfig=/etc/kubernetes/kube-proxy.conf \
+    --client-certificate=/etc/kubernetes/pki/kube-proxy.crt \
+    --client-key=/etc/kubernetes/pki/kube-proxy.key \
+    --embed-certs=true
+
+sudo kubectl config set-context default \
+    --kubeconfig=/etc/kubernetes/kube-proxy.conf \
+    --cluster=default \
+    --user=default
+
+sudo kubectl config use-context default \
+    --kubeconfig=/etc/kubernetes/kube-proxy.conf
+sudo cp /etc/kubernetes/kube-proxy.conf /vagrant
+
 echo "======= Status"
 systemctl list-units -q etcd.service kube-apiserver.service kube-scheduler.service kube-controller-manager.service

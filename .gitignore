@@ -1,3 +1,5 @@
 .vagrant/
 ca.crt
 flannel.conf
+kube-proxy.conf
+cache/
