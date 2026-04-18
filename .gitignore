@@ -1,2 +1,3 @@
 .vagrant/
 ca.crt
+flannel.conf

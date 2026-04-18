@@ -47,8 +47,7 @@ DNS.1 = localhost
 DNS.2 = $(hostname)
 IP.1  = 127.0.0.1
 IP.2  = ::1
-IP.3 = $(ip -o -4 addr show | grep 'eth0' | awk '{split($4,a,"/"); print a[1]}' | paste -sd,)
-IP.4 = $(ip -o -4 addr show | grep 'eth1' | awk '{split($4,a,"/"); print a[1]}' | paste -sd,)
+IP.3 = $(ip -o -4 addr show | grep 'eth1' | awk '{split($4,a,"/"); print a[1]}' | paste -sd,)
 EOF
 
 # Generate the server certificate:
@@ -135,7 +134,6 @@ DNS.6 = control-plane
 IP.1  = 127.0.0.1
 IP.2  = ::1
 IP.3  = 10.96.0.1
-IP.4  = $(ip -o -4 addr show | grep 'eth0' | awk '{split($4,a,"/"); print a[1]}' | paste -sd,)
 IP.4  = $(ip -o -4 addr show | grep 'eth1' | awk '{split($4,a,"/"); print a[1]}' | paste -sd,)
 EOF
 
@@ -278,6 +276,80 @@ kubectl apply -f /vagrant/ClusterRoleBinding.node-autoapprove-certificate-rotati
 
 echo "======= Share ca.crt"
 cp /etc/kubernetes/pki/ca.crt /vagrant/
+
+echo "======= Prerequisites for Flannel"
+cd /etc/kubernetes/pki
+sudo openssl genrsa -out flannel.key 2048
+sudo openssl req -new -key flannel.key -out flannel.csr -subj "/CN=system:flannel"
+sudo openssl x509 -req -in flannel.csr -out flannel.crt \
+  -CA ca.crt -CAkey ca.key \
+  -days 365
+cd
+
+echo "======= Create a kubeconfig for Flannel"
+sudo kubectl config set-cluster default \
+    --kubeconfig=/etc/kubernetes/flannel.conf \
+    --certificate-authority=/etc/kubernetes/pki/ca.crt \
+    --embed-certs=true \
+    --server=https://control-plane:6443
+
+sudo kubectl config set-credentials default \
+    --kubeconfig=/etc/kubernetes/flannel.conf \
+    --client-certificate=/etc/kubernetes/pki/flannel.crt \
+    --client-key=/etc/kubernetes/pki/flannel.key \
+    --embed-certs=true
+
+sudo kubectl config set-context default \
+    --kubeconfig=/etc/kubernetes/flannel.conf \
+    --cluster=default \
+    --user=default
+
+sudo kubectl config use-context default \
+    --kubeconfig=/etc/kubernetes/flannel.conf
+sudo cp /etc/kubernetes/flannel.conf /vagrant
+
+echo "======= Configure RBAC for Flannel"
+kubectl apply -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: system:flannel
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - nodes/status
+    verbs:
+      - patch
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: system:flannel
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:flannel
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: system:flannel
+EOF
 
 echo "======= Status"
 systemctl list-units -q etcd.service kube-apiserver.service kube-scheduler.service kube-controller-manager.service

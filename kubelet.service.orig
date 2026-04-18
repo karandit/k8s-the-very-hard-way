@@ -6,11 +6,13 @@ Requires=containerd.service
 
 [Service]
 Type=notify
-
+EnvironmentFile=/etc/default/kubelet-ip
+ExecStart=
 ExecStart=/usr/local/bin/kubelet \
     --config-dir /var/lib/kubelet/config.d/ \
     --bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf \
-    --kubeconfig=/etc/kubernetes/kubelet.conf
+    --kubeconfig=/etc/kubernetes/kubelet.conf \
+    --node-ip=${KUBELET_NODE_IP}
 
 ExecStartPre=-/bin/mkdir -p /var/lib/kubelet/config.d/
 

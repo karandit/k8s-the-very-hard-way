@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+sudo swapoff -a
+sudo modprobe br_netfilter
+sudo sysctl net.bridge.bridge-nf-call-iptables=1
+
 echo "======= Installing containerd"
 CONTAINERD_VERSION=2.2.1
 curl --skip-existing -fsSLO "https://github.com/containerd/containerd/releases/download/v${CONTAINERD_VERSION?}/containerd-${CONTAINERD_VERSION?}-linux-amd64.tar.gz"
@@ -68,6 +72,10 @@ authorization:
   mode: AlwaysAllow
 EOF
 
+sudo cat <<EOF | sudo tee /etc/default/kubelet-ip
+KUBELET_NODE_IP=$(ip -o -4 addr show | grep 'eth1' | awk '{split($4,a,"/"); print a[1]}' | paste -sd,)
+EOF
+
 echo "======= Installing kubectl"
 curl --skip-existing -fsSLO "https://dl.k8s.io/${KUBE_VERSION?}/bin/linux/amd64/kubectl"
 sudo install -m 755 kubectl /usr/local/bin
@@ -97,5 +105,58 @@ sudo cp /vagrant/kubelet.service.orig /etc/systemd/system/kubelet.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now kubelet
 
+echo "======= Installing Flannel"
+FLANNEL_VERSION=v0.27.2
+FLANNEL_PLUGIN_VERSION=v1.7.1-flannel2
+
+curl --skip-existing -fsSLO "https://github.com/flannel-io/flannel/releases/download/${FLANNEL_VERSION?}/flannel-${FLANNEL_VERSION?}-linux-amd64.tar.gz"
+curl --skip-existing -fsSLO "https://github.com/flannel-io/cni-plugin/releases/download/${FLANNEL_PLUGIN_VERSION?}/cni-plugin-flannel-linux-amd64-${FLANNEL_PLUGIN_VERSION?}.tgz"
+
+tar xzof "flannel-${FLANNEL_VERSION?}-linux-amd64.tar.gz"
+tar xzof "cni-plugin-flannel-linux-amd64-${FLANNEL_PLUGIN_VERSION?}.tgz"
+
+sudo install -m 755 flanneld /usr/local/bin
+sudo install -m 755 flannel-amd64 /opt/cni/bin/flannel
+
+echo "======= Configuring Flannel"
+sudo mkdir -p /etc/flannel
+sudo cat <<EOF | sudo tee /etc/flannel/net-conf.json
+{
+  "Network": "10.244.0.0/16",
+  "EnableNFTables": false,
+  "Backend": {
+    "Type": "vxlan"
+  }
+}
+EOF
+sudo cat <<EOF | sudo tee /etc/cni/net.d/10-flannel.conflist
+{
+  "name": "cbr0",
+  "cniVersion": "1.0.0",
+  "plugins": [
+    {
+      "type": "flannel",
+      "delegate": {
+        "hairpinMode": true,
+        "isDefaultGateway": true
+      }
+    },
+    {
+      "type": "portmap",
+      "capabilities": {
+        "portMappings": true
+      }
+    }
+  ]
+}
+EOF
+sudo cp /vagrant/flannel.conf /etc/kubernetes/flannel.conf
+
+echo "=======🚀 Starting flanneld service"
+curl --skip-existing -fsSLO https://labs.iximiuz.com/content/files/courses/kubernetes-the-very-hard-way-0cbfd997/04-cluster/02-network/__static__/flanneld.service?v=1774217657
+sudo cp flanneld.service /etc/systemd/system
+sudo systemctl daemon-reload
+sudo systemctl enable --now flanneld
+
 echo "======= Status"
-systemctl list-units -q kubelet.service containerd.service
+systemctl list-units -q kubelet.service containerd.service flanneld.service

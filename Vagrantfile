@@ -90,7 +90,6 @@ Vagrant.configure("2") do |config|
     node.vm.hostname = "worker-1"
     node.vm.network "private_network", ip: "192.168.56.11"
     node.vm.provision "shell", inline: <<-SHELL
-       swapoff -a
        sed -i '$ a 192.168.56.10 control-plane' /etc/hosts
     SHELL
   end
@@ -99,7 +98,6 @@ Vagrant.configure("2") do |config|
     node.vm.hostname = "worker-2"
     node.vm.network "private_network", ip: "192.168.56.12"
     node.vm.provision "shell", inline: <<-SHELL
-       swapoff -a
        sed -i '$ a 192.168.56.10 control-plane' /etc/hosts
     SHELL
    end
