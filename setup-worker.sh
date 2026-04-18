@@ -153,8 +153,8 @@ EOF
 sudo cp /vagrant/flannel.conf /etc/kubernetes/flannel.conf
 
 echo "=======🚀 Starting flanneld service"
-curl --skip-existing -fsSLO https://labs.iximiuz.com/content/files/courses/kubernetes-the-very-hard-way-0cbfd997/04-cluster/02-network/__static__/flanneld.service?v=1774217657
-sudo cp flanneld.service /etc/systemd/system
+# curl --skip-existing -fsSLO https://labs.iximiuz.com/content/files/courses/kubernetes-the-very-hard-way-0cbfd997/04-cluster/02-network/__static__/flanneld.service?v=1774217657
+sudo cp /vagrant/flanneld.service.orig /etc/systemd/system/flanneld.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now flanneld
 
