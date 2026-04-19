@@ -382,5 +382,87 @@ sudo kubectl config use-context default \
     --kubeconfig=/etc/kubernetes/kube-proxy.conf
 sudo cp /etc/kubernetes/kube-proxy.conf /vagrant
 
+echo "======= Prerequisites for CoreDNS"
+cd /etc/kubernetes/pki
+sudo openssl genrsa -out coredns.key 2048
+sudo openssl req -new -key coredns.key -out coredns.csr -subj "/CN=system:coredns"
+sudo openssl x509 -req -in coredns.csr -out coredns.crt \
+  -CA ca.crt -CAkey ca.key \
+  -days 365
+cd
+
+echo "======= Create a kubeconfig for CoreDNS"
+sudo kubectl config set-cluster default \
+    --kubeconfig=/etc/kubernetes/coredns.conf \
+    --certificate-authority=/etc/kubernetes/pki/ca.crt \
+    --embed-certs=true \
+    --server=https://127.0.0.1:6443
+
+sudo kubectl config set-credentials default \
+    --kubeconfig=/etc/kubernetes/coredns.conf \
+    --client-certificate=/etc/kubernetes/pki/coredns.crt \
+    --client-key=/etc/kubernetes/pki/coredns.key \
+    --embed-certs=true
+
+sudo kubectl config set-context default \
+    --kubeconfig=/etc/kubernetes/coredns.conf \
+    --cluster=default \
+    --user=default
+
+sudo kubectl config use-context default \
+    --kubeconfig=/etc/kubernetes/coredns.conf
+
+echo "======= Grant CoreDNS the permissions"
+kubectl apply -f /vagrant/ClusterRole.coredns.yaml
+kubectl apply -f /vagrant/ClusterRoleBinding.coredns.yaml
+
+echo "======= Installing CoreDNS"
+COREDNS_VERSION=1.12.2
+curl --skip-existing -fsSLO "https://github.com/coredns/coredns/releases/download/v${COREDNS_VERSION}/coredns_${COREDNS_VERSION}_linux_amd64.tgz"
+tar xzf coredns_${COREDNS_VERSION}_linux_amd64.tgz
+sudo install -m 755 coredns /usr/local/bin
+sudo adduser \
+    --system \
+    --group \
+    --disabled-login \
+    --disabled-password \
+    --home /var/lib/coredns \
+    coredns
+sudo chown coredns:coredns /etc/kubernetes/coredns.conf
+
+echo "======= Configuring CoreDNS"
+sudo mkdir -p /etc/coredns
+cat <<EOF | sudo tee /etc/coredns/Corefile
+.:53 {
+    bind eth1
+
+    errors
+    health {
+        lameduck 5s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        kubeconfig /etc/kubernetes/coredns.conf
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+        ttl 30
+    }
+    forward . /etc/resolv.conf {
+        max_concurrent 1000
+    }
+    cache 30
+    loop
+    reload
+    loadbalance
+}
+EOF
+
+echo "=======🚀 Starting CoreDND service"
+curl --skip-existing -fsSLO  https://labs.iximiuz.com/content/files/courses/kubernetes-the-very-hard-way-0cbfd997/04-cluster/04-coredns/__static__/coredns.service?v=1774217660
+sudo cp coredns.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now coredns
+sudo systemctl restart coredns
+
 echo "======= Status"
-systemctl list-units -q etcd.service kube-apiserver.service kube-scheduler.service kube-controller-manager.service
+systemctl list-units -q etcd.service kube-apiserver.service kube-scheduler.service kube-controller-manager.service coredns.service

@@ -56,6 +56,15 @@ containerRuntimeEndpoint: unix:///var/run/containerd/containerd.sock
 cgroupDriver: systemd
 EOF
 
+sudo cat <<EOF | sudo tee /var/lib/kubelet/config.d/60-dns.conf
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+
+clusterDNS:
+  - 192.168.56.10
+clusterDomain: cluster.local
+EOF
+
 sudo cat <<EOF | sudo tee /var/lib/kubelet/config.d/70-authnz.conf
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
